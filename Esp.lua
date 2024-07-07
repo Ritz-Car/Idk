@@ -1,8 +1,21 @@
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local LocalPlayer = Players.LocalPlayer
+local ESP_ENABLED = true
 
-function createESP(parent, name)
+-- Function to toggle ESP on/off
+function toggleESP()
+    ESP_ENABLED = not ESP_ENABLED
+    print(ESP_ENABLED and "ESP On" or "ESP Off")
+    if not ESP_ENABLED then
+        for _, esp in pairs(workspace:GetDescendants()) do
+            if esp:IsA("BillboardGui") and esp.Name == "ESP" then
+                esp:Destroy()
+            end
+        end
+    else
+        addESPToPlayersAndItems()
+    end
+end
+
+local function createESP(parent, name)
     local esp = Instance.new("BillboardGui")
     esp.Name = "ESP"
     esp.Parent = parent
@@ -10,126 +23,114 @@ function createESP(parent, name)
     esp.StudsOffset = Vector3.new(0, 2, 0)
     esp.AlwaysOnTop = true
 
-    -- Create name label
+    -- create name label
     local nameLabel = Instance.new("TextLabel")
     nameLabel.Text = name
     nameLabel.Size = UDim2.new(1, 0, 0.3, 0)
     nameLabel.Font = Enum.Font.SourceSans
-    nameLabel.TextScaled = true
-    nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255) -- White text
-    nameLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0) -- Black stroke
-    nameLabel.TextStrokeTransparency = 0.5
+    nameLabel.TextColor3 = Color3.fromRGB(0, 255, 0) -- green text
+    nameLabel.TextStrokeColor3 = Color3.fromRGB(255, 0, 0) -- red stroke
+    nameLabel.TextStrokeTransparency = 0
     nameLabel.BackgroundTransparency = 1
     nameLabel.Parent = esp
 
-    -- Create health bar background
+    -- create health bar background
     local healthBarBg = Instance.new("Frame")
     healthBarBg.Size = UDim2.new(1, 0, 0.3, 0)
     healthBarBg.Position = UDim2.new(0, 0, 0.3, 0)
-    healthBarBg.BackgroundColor3 = Color3.fromRGB(60, 60, 60) -- Dark gray background
+    healthBarBg.BackgroundColor3 = Color3.fromRGB(255, 0, 0) -- red background
     healthBarBg.BorderSizePixel = 0
     healthBarBg.Parent = esp
 
-    -- Create health bar
+    -- create health bar with rounded corners
     local healthBar = Instance.new("Frame")
     healthBar.Size = UDim2.new(1, 0, 1, 0)
-    healthBar.BackgroundColor3 = Color3.fromRGB(0, 255, 0) -- Green bar
+    healthBar.BackgroundColor3 = Color3.fromRGB(0, 255, 0) -- green bar
     healthBar.BorderSizePixel = 0
     healthBar.Parent = healthBarBg
 
-    -- Create distance label
+    local uiCorner = Instance.new("UICorner")
+    uiCorner.CornerRadius = UDim.new(0, 8)
+    uiCorner.Parent = healthBar
+
+    -- create distance label
     local distanceLabel = Instance.new("TextLabel")
     distanceLabel.Size = UDim2.new(1, 0, 0.3, 0)
     distanceLabel.Position = UDim2.new(0, 0, 0.6, 0)
     distanceLabel.Font = Enum.Font.SourceSans
-    distanceLabel.TextScaled = true
-    distanceLabel.TextColor3 = Color3.fromRGB(255, 255, 255) -- White text
-    distanceLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0) -- Black stroke
-    distanceLabel.TextStrokeTransparency = 0.5
+    distanceLabel.TextColor3 = Color3.fromRGB(0, 255, 0) -- green text
+    distanceLabel.TextStrokeColor3 = Color3.fromRGB(255, 0, 0) -- red stroke
+    distanceLabel.TextStrokeTransparency = 0
     distanceLabel.BackgroundTransparency = 1
     distanceLabel.Parent = esp
-
-    -- Add highlight effect
-    local highlight = Instance.new("Highlight")
-    highlight.Parent = parent
-    highlight.FillColor = Color3.fromRGB(0, 170, 255) -- Light blue highlight
-    highlight.OutlineColor = Color3.fromRGB(0, 0, 0) -- Black outline
 
     return esp, nameLabel, healthBar, distanceLabel
 end
 
-function updateHealthBar(humanoid, healthBar)
+local function updateHealthBar(humanoid, healthBar)
     local healthPercent = humanoid.Health / humanoid.MaxHealth
     healthBar.Size = UDim2.new(healthPercent, 0, 1, 0)
 end
 
-function updateDistanceLabel(object, distanceLabel)
-    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        local distance = (object.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
-        distanceLabel.Text = "Distance: " .. math.floor(distance) .. " studs"
-    end
-end
-
-function addESPToModel(model)
-    local head = model:FindFirstChild("Head")
+local function addESPToObject(object)
+    local head = object:FindFirstChild("Head") or object:FindFirstChild("Handle")
     if head then
-        local esp, nameLabel, healthBar, distanceLabel = createESP(head, model.Name)
+        local esp, nameLabel, healthBar, distanceLabel = createESP(head, object.Name)
 
         -- Check if the model has a humanoid (for players and NPCs)
-        local humanoid = model:FindFirstChild("Humanoid")
+        local humanoid = object:FindFirstChild("Humanoid")
         if humanoid then
             updateHealthBar(humanoid, healthBar)
             humanoid.HealthChanged:Connect(function()
-                updateHealthBar(humanoid, healthBar)
+                if ESP_ENABLED then
+                    updateHealthBar(humanoid, healthBar)
+                end
             end)
         else
-            -- If no humanoid, hide the health bar
-            healthBar.Parent.Visible = false
+            healthBar.Parent.Visible = false -- Hide health bar for tools
         end
 
-        -- Update distance dynamically
-        RunService.RenderStepped:Connect(function()
-            updateDistanceLabel(head, distanceLabel)
-        end)
+        -- Calculate distance
+        local localPlayer = game.Players.LocalPlayer
+        if localPlayer and localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            local hrp = localPlayer.Character.HumanoidRootPart
+            game:GetService("RunService").Heartbeat:Connect(function()
+                if ESP_ENABLED and object.Parent then
+                    local distance = (object.PrimaryPart.Position - hrp.Position).Magnitude
+                    distanceLabel.Text = "Distance: " .. math.floor(distance) .. " studs"
+                end
+            end)
+        end
 
-        nameLabel.Text = model.Name
-        print("h") -- Indicate ESP was added to a model
+        nameLabel.Text = object.Name
     end
 end
 
-function addESPToTool(tool)
-    local handle = tool:FindFirstChild("Handle")
-    if handle then
-        local esp, nameLabel, healthBar, distanceLabel = createESP(handle, tool.Name)
-        healthBar.Parent.Visible = false -- Hide health bar for tools
-
-        -- Update distance dynamically
-        RunService.RenderStepped:Connect(function()
-            updateDistanceLabel(handle, distanceLabel)
-        end)
-
-        nameLabel.Text = tool.Name
-        print("h") -- Indicate ESP was added to a tool
-    end
-end
-
-function onDescendantAdded(descendant)
-    if descendant:IsA("Model") then
-        addESPToModel(descendant)
-    elseif descendant:IsA("Tool") then
-        addESPToTool(descendant)
-    end
-end
-
-function addESPToPlayersAndItems()
+local function addESPToPlayersAndItems()
+    if not ESP_ENABLED then return end
     for _, object in pairs(workspace:GetDescendants()) do
-        if object:IsA("Model") then
-            addESPToModel(object)
-        elseif object:IsA("Tool") then
-            addESPToTool(object)
+        if (object:IsA("Model") and (object:FindFirstChild("Humanoid") or object:FindFirstChild("Tool"))) or object:IsA("Tool") then
+            addESPToObject(object)
         end
     end
 end
 
-workspace.DescendantAdded:Connect(onDescendantAdded)
+-- Refresh ESP periodically
+game:GetService("RunService").Stepped:Connect(function()
+    if ESP_ENABLED then
+        addESPToPlayersAndItems()
+        print("ESP refreshed")
+    end
+end)
+
+-- Create a button to toggle ESP on/off
+local ScreenGui = Instance.new("ScreenGui", game.Players.LocalPlayer.PlayerGui)
+local ToggleButton = Instance.new("TextButton", ScreenGui)
+ToggleButton.Size = UDim2.new(0, 100, 0, 50)
+ToggleButton.Position = UDim2.new(0, 10, 0, 10)
+ToggleButton.Text = "Toggle ESP"
+ToggleButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+ToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleButton.MouseButton1Click:Connect(toggleESP)
+
 addESPToPlayersAndItems()
